@@ -4,6 +4,7 @@ from marshmallow import ValidationError
 import datetime
 
 from Models.AddPoints import AddPoints
+from Models.AwardRedemption import AwardRedemption
 from Models.Card import Card
 from Utils.validate import validate
 
@@ -58,6 +59,34 @@ def add_points():
     conn.commit()
 
     cur.execute("UPDATE TCarteFedelta SET SaldoPunti = ? WHERE CartaFedeltaID = ?", [str(cartaFedelta['SaldoPunti'] + result["SaldoPunti"]), str(result["CartaFedeltaID"])])
+    conn.commit()
+    
+    return 'success', 200
+
+@app.route("/award_redemption", methods = ['POST'])
+def award_redemption():
+    try:
+        result = validate(request.json, AwardRedemption())
+    except ValidationError as err:
+        return jsonify(err.messages), 400
+    
+    conn = get_db()
+    cur = conn.cursor()
+
+    cur.execute("SELECT * FROM TCarteFedelta WHERE CartaFedeltaID = ?", [str(result["CartaFedeltaID"])])
+    cartaFedelta = cur.fetchone()
+
+    cur.execute("SELECT * FROM TPremi WHERE PremioID = ?", [str(result["PremioID"])])
+    premio = cur.fetchone()
+
+    if not cartaFedelta or not premio:
+        return jsonify({'message': "Card or award not found"}), 404
+
+    dataNow = datetime.datetime.now()
+    cur.execute("INSERT INTO TMovimenti (CartaFedeltaID, DataMovimento, TipoMovimento, Punti) VALUES (?, ?, ?, ?)", [str(result["CartaFedeltaID"]), dataNow, '2', str(result["SaldoPunti"])])
+    conn.commit()
+
+    cur.execute("UPDATE TCarteFedelta SET SaldoPunti = ? WHERE CartaFedeltaID = ?", [str(cartaFedelta['SaldoPunti'] - result["SaldoPunti"]), str(result["CartaFedeltaID"])])
     conn.commit()
     
     return 'success', 200
